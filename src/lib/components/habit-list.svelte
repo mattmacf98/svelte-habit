@@ -1,20 +1,26 @@
 <script lang="ts">
+	import HabitCard from "./habit-card.svelte";
+
     //TODO these will come in from API
     interface Habit {
         name: string;
         description: string;
         completed: boolean;
+        card: HabitCard | undefined;
     }
 
     const initialHabits: Habit[] = [
-        { name: "Read", description: "Read for 10 minutes", completed: false },
-        { name: "Exercise", description: "Exercise for 30 minutes", completed: false },
-        { name: "Meditate", description: "Meditate for 10 minutes", completed: false },
+        { name: "Read", description: "Read for 10 minutes", completed: false, card: undefined },
+        { name: "Exercise", description: "Exercise for 30 minutes", completed: false, card: undefined },
+        { name: "Meditate", description: "Meditate for 10 minutes", completed: false, card: undefined },
     ];
 
 
     let notification = $state<string>();
     let habits = $state<Habit[]>([]);
+    let focusedHabit = $state<Habit>();
+    let hoveredHabit = $state<Habit>();
+    let hoveredHabitTimeout = $state.raw<number>();
     let completedPercentage = $derived(habits.filter(habit => habit.completed).length / habits.length * 100);
 
     $effect.pre(() => {
@@ -39,29 +45,90 @@
         }, 3000);
 
         return () => {
+            notification = undefined;
             clearTimeout(timeout);
         }
     });
+
+    $effect(() => {
+        for (const habit of habits) {
+            habit.card?.handleBlur();
+        }
+
+        if (focusedHabit) {
+            focusedHabit.card?.handleFocus();
+        }
+    });
+
+    function debounceUpdateHoveredHabit(habit: Habit | undefined) {
+        if (hoveredHabitTimeout) {
+            clearTimeout(hoveredHabitTimeout);
+        }
+
+        hoveredHabitTimeout = setTimeout(() => {
+            hoveredHabit = habit;
+        }, 100);
+    }
+
+    function focusRandomHabit() {
+        const uncompletedHabits = habits.filter(habit => !habit.completed);
+        const randomIndex = Math.floor(Math.random() * uncompletedHabits.length);
+        const habit = uncompletedHabits[randomIndex];
+        if (habit) {
+            focusedHabit = habit;
+        }
+    }
+
+    function completeHabit() {
+        if (focusedHabit) {
+            focusedHabit.card?.getCheckbox()?.click();
+            focusedHabit = undefined;
+        }
+    }
 </script>
 
+{#snippet CompletedItemHeader()}
+    <div class="completed-header">
+        <div class="completed-badge">
+            <svg class="completed-icon" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+            </svg>
+            <span class="completed-text">Completed</span>
+        </div>
+    </div>
+{/snippet}
+
 <div class="habit-container">
-    <h1 class="title">Habit List</h1>
+    <div class="header-container">
+        <h1 class="title">Habit List</h1>
+        {#if !focusedHabit}
+            <button class="focus-random-habit-button" onclick={focusRandomHabit}>Focus Random Habit</button>
+        {:else}
+            <div class="button-group">
+                <button class="unfocus-habit-button" onclick={() => focusedHabit = undefined}>Unfocus Habit</button>
+                <button class="complete-habit-button" onclick={completeHabit}>Complete Habit</button>
+            </div>
+        {/if}
+    </div>
+
+    {#if hoveredHabit}
+        <div class="hovered-habit">
+            <h2 class="hovered-habit-title">{hoveredHabit.name}</h2>
+            <p class="hovered-habit-description">{hoveredHabit.description}</p>
+        </div>
+    {:else}
+        <div class="hovered-habit">
+            <h2 class="hovered-habit-title">Hover over a habit to see more details</h2>
+        </div>
+    {/if}
+
     <p class="completed-percentage">Completed: {completedPercentage.toFixed(2)}%</p>
     <ul class="habit-list">
         {#each habits as habit}
-            <li class="habit-item">
-                <div class="habit-content">
-                    <h3 class="habit-name">{habit.name}</h3>
-                    <p class="habit-description">{habit.description}</p>
-                </div>
-                <div class="habit-status">
-                    <input 
-                        type="checkbox" 
-                        bind:checked={habit.completed}
-                        class="habit-checkbox"
-                    />
-                </div>
-            </li>
+            <HabitCard bind:this={habit.card} {...habit} bind:completed={habit.completed} header={habit.completed ? CompletedItemHeader : undefined}
+                onHover={() => debounceUpdateHoveredHabit(habit)}
+                onLeave={() => debounceUpdateHoveredHabit(undefined)}
+            />
         {/each}
     </ul>
     {#if notification}
@@ -70,6 +137,98 @@
 </div>
 
 <style>
+    .button-group {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .unfocus-habit-button {
+        background-color: #e6551b;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+    }
+
+    .complete-habit-button {
+        background-color: #10b981;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+    }
+
+    .header-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    .focus-random-habit-button {
+        background-color: #10b981;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+    }
+    .focus-random-habit-button:hover {
+        background-color: #0e946f;
+    }
+    .focus-random-habit-button:active {
+        background-color: #07654b;
+    }
+
+    .hovered-habit {
+        background-color: #e0f2fe;
+        border: 1px solid #0288d1;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        color: #01579b;
+        font-size: 0.875rem;
+        font-weight: 500;
+        height: 100px;
+        text-align: center;
+    }
+
+    .hovered-habit-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #01579b;
+    }
+
+    .hovered-habit-description {
+        font-size: 0.875rem;
+        font-weight: 400;
+        color: #01579b;
+    }
+
+    .completed-header {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+    }
+    
+    .completed-badge {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: #10b981;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+        font-weight: 600;
+    }
+
+    .completed-icon {
+        width: 1.5rem;
+        height: 1.5rem;
+        margin-right: 0.5rem;
+    }
+
+    .completed-text {
+        font-size: 1.25rem;
+    }
+
     .habit-container {
         max-width: 600px;
         margin: 2rem auto;
@@ -102,52 +261,6 @@
         display: flex;
         flex-direction: column;
         gap: 1rem;
-    }
-
-    .habit-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 1.25rem;
-        background: #f9fafb;
-        border: 1px solid #e5e7eb;
-        border-radius: 8px;
-        transition: all 0.2s ease;
-    }
-
-    .habit-item:hover {
-        background: #f3f4f6;
-        border-color: #d1d5db;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
-    }
-
-    .habit-content {
-        flex: 1;
-    }
-
-    .habit-name {
-        font-size: 1.125rem;
-        font-weight: 600;
-        color: #374151;
-        margin: 0 0 0.25rem 0;
-    }
-
-    .habit-description {
-        font-size: 0.875rem;
-        color: #6b7280;
-        margin: 0;
-    }
-
-    .habit-status {
-        margin-left: 1rem;
-    }
-
-    .habit-checkbox {
-        width: 1.25rem;
-        height: 1.25rem;
-        accent-color: #3b82f6;
-        cursor: pointer;
     }
 
     .notification {
