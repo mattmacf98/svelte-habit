@@ -1,7 +1,18 @@
+<script module>
+	let habits = new Set<Habit>();
+
+	export function completeAll() {
+        for (const habit of habits) {
+            if (!habit.completedToday) {
+                habit.toggleCompletion();
+            }
+        }
+	}
+</script>
+
 <script lang="ts">
 	import type { Snippet } from "svelte";
-
-    let checkbox = $state<HTMLInputElement>();
+    import { Habit } from "$lib/utils/habit.svelte";
     let isFocused = $state(false);
 
     interface Props {
@@ -9,13 +20,15 @@
         onHover?: () => void,
         onLeave?: () => void,
         name: string,
-        completed: boolean
+        description: string
     };
 
-    let {header, name, completed = $bindable(), onHover, onLeave}: Props = $props();
+    let {header, name, description, onHover, onLeave}: Props = $props();
+    const habit = new Habit(name, description);
+    habits.add(habit);
 
-    export function getCheckbox() {
-        return checkbox;
+    export function getHabit() {
+        return habit;
     }
 
     export function handleFocus() {
@@ -32,21 +45,63 @@
         {@render header()}
     {:else}
         <div class="habit-content">
-            <h3 class="habit-name">{name}</h3>
+            <h3 class="habit-name">{habit.name}</h3>
         </div>
     {/if}
+    <div class="habit-streak">
+        <span class="streak-text">Streak: {habit.streak}</span>
+    </div>
+    <div class="habit-difficulty">
+        <span class={`difficulty-badge ${habit.difficultyString.toLowerCase()}`} onclick={() => habit.cycleDifficulty()}>
+            {habit.difficultyString}
+        </span>
+    </div>
     <div class="habit-status">
         <input 
             type="checkbox" 
-            bind:checked={completed}
+            checked={habit.completedToday}
+            onchange={() => habit.toggleCompletion()}
             class="habit-checkbox"
-            bind:this={checkbox}
         />
     </div>
 </div>
 
 <style>
-      .habit-item {
+    .habit-streak {
+        margin-right: 1rem;
+    }
+
+    .streak-text {
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+
+    .streak-text:hover {
+        color: #374151;
+        cursor: pointer;
+    }
+
+    .difficulty-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .difficulty-badge.easy {
+        background-color: #10b981;
+    }
+
+    .difficulty-badge.medium {
+        background-color: #f59e0b;
+    }
+
+    .difficulty-badge.hard {
+        background-color: #ef4444;
+    }
+
+    .habit-item {
         display: flex;
         align-items: center;
         justify-content: space-between;

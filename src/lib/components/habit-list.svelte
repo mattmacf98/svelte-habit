@@ -1,31 +1,14 @@
 <script lang="ts">
-	import HabitCard from "./habit-card.svelte";
+	import HabitCard, {completeAll} from "./habit-card.svelte";
+    import { getHabitsContext } from "$lib/contexts/habits-context.svelte";
 
-    //TODO these will come in from API
-    interface Habit {
-        name: string;
-        description: string;
-        completed: boolean;
-        card: HabitCard | undefined;
-    }
-
-    const initialHabits: Habit[] = [
-        { name: "Read", description: "Read for 10 minutes", completed: false, card: undefined },
-        { name: "Exercise", description: "Exercise for 30 minutes", completed: false, card: undefined },
-        { name: "Meditate", description: "Meditate for 10 minutes", completed: false, card: undefined },
-    ];
-
+    const habitsContext = getHabitsContext();
 
     let notification = $state<string>();
-    let habits = $state<Habit[]>([]);
-    let focusedHabit = $state<Habit>();
-    let hoveredHabit = $state<Habit>();
+    let focusedHabit = $state<HabitCard>();
+    let hoveredHabit = $state<HabitCard>();
     let hoveredHabitTimeout = $state.raw<number>();
-    let completedPercentage = $derived(habits.filter(habit => habit.completed).length / habits.length * 100);
-
-    $effect.pre(() => {
-        habits = initialHabits;
-    });
+    let completedPercentage = $derived(habitsContext.habits.filter(habit => habit.card?.getHabit().completedToday).length / habitsContext.habits.length * 100);
 
     $effect(() => {
         const timeNow = new Date();
@@ -51,37 +34,37 @@
     });
 
     $effect(() => {
-        for (const habit of habits) {
+        for (const habit of habitsContext.habits) {
             habit.card?.handleBlur();
         }
 
         if (focusedHabit) {
-            focusedHabit.card?.handleFocus();
+            focusedHabit.handleFocus();
         }
     });
 
-    function debounceUpdateHoveredHabit(habit: Habit | undefined) {
+    function debounceUpdateHoveredHabit(habit: HabitCard | undefined) {
         if (hoveredHabitTimeout) {
             clearTimeout(hoveredHabitTimeout);
         }
 
         hoveredHabitTimeout = setTimeout(() => {
             hoveredHabit = habit;
-        }, 100);
+        }, 100) as unknown as number;
     }
 
     function focusRandomHabit() {
-        const uncompletedHabits = habits.filter(habit => !habit.completed);
+        const uncompletedHabits = habitsContext.habits.filter(habit => !habit.card?.getHabit().completedToday);
         const randomIndex = Math.floor(Math.random() * uncompletedHabits.length);
         const habit = uncompletedHabits[randomIndex];
         if (habit) {
-            focusedHabit = habit;
+            focusedHabit = habit.card;
         }
     }
 
     function completeHabit() {
         if (focusedHabit) {
-            focusedHabit.card?.getCheckbox()?.click();
+            focusedHabit.getHabit().toggleCompletion();
             focusedHabit = undefined;
         }
     }
@@ -102,7 +85,10 @@
     <div class="header-container">
         <h1 class="title">Habit List</h1>
         {#if !focusedHabit}
-            <button class="focus-random-habit-button" onclick={focusRandomHabit}>Focus Random Habit</button>
+            <div class="button-group">
+                <button class="focus-random-habit-button" onclick={focusRandomHabit}>Focus Random Habit</button>
+                <button class="complete-all-button" onclick={completeAll}>Complete All</button>
+            </div>
         {:else}
             <div class="button-group">
                 <button class="unfocus-habit-button" onclick={() => focusedHabit = undefined}>Unfocus Habit</button>
@@ -113,8 +99,8 @@
 
     {#if hoveredHabit}
         <div class="hovered-habit">
-            <h2 class="hovered-habit-title">{hoveredHabit.name}</h2>
-            <p class="hovered-habit-description">{hoveredHabit.description}</p>
+            <h2 class="hovered-habit-title">{hoveredHabit.getHabit().name}</h2>
+            <p class="hovered-habit-description">{hoveredHabit.getHabit().description}</p>
         </div>
     {:else}
         <div class="hovered-habit">
@@ -123,14 +109,24 @@
     {/if}
 
     <p class="completed-percentage">Completed: {completedPercentage.toFixed(2)}%</p>
-    <ul class="habit-list">
-        {#each habits as habit}
-            <HabitCard bind:this={habit.card} {...habit} bind:completed={habit.completed} header={habit.completed ? CompletedItemHeader : undefined}
-                onHover={() => debounceUpdateHoveredHabit(habit)}
-                onLeave={() => debounceUpdateHoveredHabit(undefined)}
-            />
-        {/each}
-    </ul>
+
+    {#if habitsContext.loading}
+        <div class="loading">Loading...</div>
+    {:else if habitsContext.error}
+        {#if habitsContext.error}
+            <div class="error">{habitsContext.error}</div>
+        {/if}
+    {:else}
+        <ul class="habit-list">
+            {#each habitsContext.habits as habit}
+                <HabitCard bind:this={habit.card} {...habit} header={habit.card?.getHabit().completedToday ? CompletedItemHeader : undefined}
+                    onHover={() => debounceUpdateHoveredHabit(habit.card)}
+                    onLeave={() => debounceUpdateHoveredHabit(undefined)}
+                />
+            {/each}
+        </ul>
+    {/if}
+    
     {#if notification}
         <div class="notification">{notification}</div>
     {/if}
@@ -140,6 +136,21 @@
     .button-group {
         display: flex;
         gap: 1rem;
+    }
+
+    .complete-all-button {
+        background-color: #10b981;
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 12px;
+    }
+
+    .complete-all-button:hover {
+        background-color: #0e946f;
+    }
+
+    .complete-all-button:active {
+        background-color: #07654b;
     }
 
     .unfocus-habit-button {
